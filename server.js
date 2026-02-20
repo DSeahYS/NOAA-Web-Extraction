@@ -8,7 +8,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const cron = require('node-cron');
 const extractor = require('./extractor');
 const alerts = require('./alerts');
 
@@ -36,122 +35,175 @@ app.use('/api', (req, res, next) => {
     res.status(401).json({ error: 'Unauthorized — invalid or missing API key' });
 });
 
-// ─── In-Memory Cache ─────────────────────────────────────────────────────────
+// ─── Smart Cache Engine (Vercel Compatible) ──────────────────────────────────
 
-let latestData = null;
-let latestEvaluation = null;
-let historyData = null;
-let lastFetchTime = null;
+let cache = {
+    data: null,
+    evaluation: null,
+    history: null,
+    lastFetchBaseMs: 0
+};
 
-// ─── Data Fetch Cycle ────────────────────────────────────────────────────────
+let isFetching = false;
+let fetchPromise = null;
 
-async function runCycle() {
-    const startTime = Date.now();
-    console.log(`[${new Date().toISOString()}] Fetching NOAA data...`);
-    try {
-        const [result, history] = await Promise.all([
-            extractor.fetchAll(),
-            extractor.fetchRawHistory(),
-        ]);
-        latestData = result;
-        latestEvaluation = alerts.evaluate(result.data);
-        historyData = history;
-        lastFetchTime = new Date().toISOString();
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`[${lastFetchTime}] ✅ Data fetched in ${elapsed}s — ${latestEvaluation.alerts.length} alert(s) active`);
-    } catch (err) {
-        console.error(`[ERROR] Fetch cycle failed: ${err.message}`);
+// TTL: 5 minutes (in milliseconds)
+const CACHE_TTL = 5 * 60 * 1000;
+
+async function getFreshData() {
+    const now = Date.now();
+
+    // 1. Return cache if it's fresh
+    if (cache.data && (now - cache.lastFetchBaseMs < CACHE_TTL)) {
+        return cache;
     }
+
+    // 2. If already fetching, wait and return that result (thundering herd protection)
+    if (isFetching) {
+        return await fetchPromise;
+    }
+
+    // 3. Otherwise, fetch new data from NOAA
+    isFetching = true;
+    console.log(`[${new Date().toISOString()}] Cache stale or missing. Fetching from NOAA...`);
+
+    fetchPromise = (async () => {
+        try {
+            const startTime = Date.now();
+            const [result, history] = await Promise.all([
+                extractor.fetchAll(),
+                extractor.fetchRawHistory(),
+            ]);
+
+            cache = {
+                data: result,
+                evaluation: alerts.evaluate(result.data),
+                history: history,
+                lastFetchBaseMs: Date.now()
+            };
+
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`[${new Date().toISOString()}] ✅ Data fetched in ${elapsed}s`);
+
+            return cache;
+        } catch (err) {
+            console.error(`[ERROR] NOAA Fetch failed: ${err.message}`);
+            // If fetch fails but we have stale cache, return it rather than crashing
+            if (cache.data) {
+                console.log('Returning stale cache due to fetch error.');
+                return cache;
+            }
+            throw err;
+        } finally {
+            isFetching = false;
+            fetchPromise = null;
+        }
+    })();
+
+    return await fetchPromise;
 }
 
-// ─── API Routes ──────────────────────────────────────────────────────────────
+// ─── API Routes (With Edge Caching Headers) ──────────────────────────────────
+
+// Middleware: Set Vercel Edge caching headers on all API responses
+// s-maxage=300 tells the Vercel CDN to cache the response for 5 mins
+app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=60');
+    next();
+});
 
 // Full JSON snapshot (webhook endpoint for n8n)
-app.get('/api/status', (req, res) => {
-    if (!latestData) return res.status(503).json({ error: 'Data not yet loaded' });
-    res.json({
-        ...latestData,
-        alerts: latestEvaluation.alerts.map(a => ({
-            id: a.id, severity: a.severity.label, emoji: a.severity.emoji,
-            message: a.message, details: a.details,
-        })),
-        metrics: Object.fromEntries(
-            Object.entries(latestEvaluation.metrics).map(([k, v]) => [k, {
-                ...v, status: v.status.label, status_emoji: v.status.emoji,
-            }])
-        ),
-        last_fetch: lastFetchTime,
-    });
+app.get('/api/status', async (req, res) => {
+    try {
+        const c = await getFreshData();
+        res.json({
+            ...c.data,
+            alerts: c.evaluation.alerts.map(a => ({
+                id: a.id, severity: a.severity.label, emoji: a.severity.emoji,
+                message: a.message, details: a.details,
+            })),
+            metrics: Object.fromEntries(
+                Object.entries(c.evaluation.metrics).map(([k, v]) => [k, {
+                    ...v, status: v.status.label, status_emoji: v.status.emoji,
+                }])
+            ),
+            last_fetch: new Date(c.lastFetchBaseMs).toISOString(),
+        });
+    } catch (e) {
+        res.status(503).json({ error: 'Data unavailable', message: e.message });
+    }
 });
 
 // Alerts-only endpoint (for Telegram bot filtering)
-app.get('/api/alerts', (req, res) => {
-    if (!latestEvaluation) return res.status(503).json({ error: 'Data not yet loaded' });
-    const hasAlerts = latestEvaluation.alerts.length > 0;
-    res.json({
-        has_alerts: hasAlerts,
-        alert_count: latestEvaluation.alerts.length,
-        highest_severity: hasAlerts ? latestEvaluation.alerts[0].severity.label : 'NOMINAL',
-        alerts: latestEvaluation.alerts.map(a => ({
-            id: a.id, severity: a.severity.label, emoji: a.severity.emoji,
-            message: a.message, details: a.details,
-        })),
-        extraction_time: latestData?.extraction_time,
-    });
+app.get('/api/alerts', async (req, res) => {
+    try {
+        const c = await getFreshData();
+        const hasAlerts = c.evaluation.alerts.length > 0;
+        res.json({
+            has_alerts: hasAlerts,
+            alert_count: c.evaluation.alerts.length,
+            highest_severity: hasAlerts ? c.evaluation.alerts[0].severity.label : 'NOMINAL',
+            alerts: c.evaluation.alerts.map(a => ({
+                id: a.id, severity: a.severity.label, emoji: a.severity.emoji,
+                message: a.message, details: a.details,
+            })),
+            extraction_time: c.data.extraction_time,
+        });
+    } catch (e) {
+        res.status(503).json({ error: 'Data unavailable' });
+    }
 });
 
 // Chart history endpoints
-app.get('/api/history/solar-wind', (req, res) => {
-    if (!historyData) return res.status(503).json({ error: 'Data not yet loaded' });
-    res.json({ mag: historyData.solarWindMag, plasma: historyData.solarWindPlasma });
+app.get('/api/history/solar-wind', async (req, res) => {
+    try { const c = await getFreshData(); res.json({ mag: c.history.solarWindMag, plasma: c.history.solarWindPlasma }); }
+    catch { res.status(503).json({ error: 'Failed' }); }
 });
 
-app.get('/api/history/kp', (req, res) => {
-    if (!historyData) return res.status(503).json({ error: 'Data not yet loaded' });
-    res.json({ kp: historyData.kpIndex });
+app.get('/api/history/kp', async (req, res) => {
+    try { const c = await getFreshData(); res.json({ kp: c.history.kpIndex }); }
+    catch { res.status(503).json({ error: 'Failed' }); }
 });
 
-app.get('/api/history/xrays', (req, res) => {
-    if (!historyData) return res.status(503).json({ error: 'Data not yet loaded' });
-    res.json({ xrays: historyData.xrays });
+app.get('/api/history/xrays', async (req, res) => {
+    try { const c = await getFreshData(); res.json({ xrays: c.history.xrays }); }
+    catch { res.status(503).json({ error: 'Failed' }); }
 });
 
-app.get('/api/history/protons', (req, res) => {
-    if (!historyData) return res.status(503).json({ error: 'Data not yet loaded' });
-    res.json({ protons: historyData.protons });
+app.get('/api/history/protons', async (req, res) => {
+    try { const c = await getFreshData(); res.json({ protons: c.history.protons }); }
+    catch { res.status(503).json({ error: 'Failed' }); }
 });
 
-app.get('/api/history/electrons', (req, res) => {
-    if (!historyData) return res.status(503).json({ error: 'Data not yet loaded' });
-    res.json({ electrons: historyData.electrons });
+app.get('/api/history/electrons', async (req, res) => {
+    try { const c = await getFreshData(); res.json({ electrons: c.history.electrons }); }
+    catch { res.status(503).json({ error: 'Failed' }); }
 });
 
-// Manual re-fetch trigger
+// Manual re-fetch trigger (bypass cache)
 app.post('/api/fetch', async (req, res) => {
-    await runCycle();
-    res.json({ success: true, last_fetch: lastFetchTime });
+    cache.lastFetchBaseMs = 0; // Invalidate cache
+    try {
+        const c = await getFreshData();
+        res.json({ success: true, last_fetch: new Date(c.lastFetchBaseMs).toISOString() });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 // ─── Start Server ────────────────────────────────────────────────────────────
 
 async function main() {
     console.log('┌──────────────────────────────────────────────────────────────┐');
-    console.log('│  🛰️  NOAA Space Weather Dashboard Server                    │');
+    console.log('│  🛰️  NOAA Space Weather Server (Serverless-Ready)            │');
     console.log(`│  http://localhost:${PORT}                                      │`);
-    console.log('│  Polling 9 feeds every 30 minutes                           │');
+    console.log('│  On-demand polling with Edge Caching (stale-while-reval)    │');
     console.log('└──────────────────────────────────────────────────────────────┘');
-
-    // Initial fetch
-    await runCycle();
-
-    // Schedule every 30 minutes
-    cron.schedule('*/30 * * * *', runCycle);
 
     app.listen(PORT, () => {
         console.log(`\n🌐 Dashboard: http://localhost:${PORT}`);
         console.log(`📡 Webhook:   http://localhost:${PORT}/api/status`);
-        console.log(`🚨 Alerts:    http://localhost:${PORT}/api/alerts`);
-        console.log('\n⏱️  Next auto-fetch in 30 minutes. Press Ctrl+C to stop.\n');
+        console.log(`🚨 Alerts:    http://localhost:${PORT}/api/alerts\n`);
     });
 }
 

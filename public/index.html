@@ -1885,7 +1885,7 @@
                         <div class="detail-body">
                             <div class="detail-row">
                                 <span class="detail-label">Server → NOAA</span>
-                                <span class="detail-value">Every 30 min (server-side cron)</span>
+                                <span class="detail-value">Serverless On-Demand (max 1/5min)</span>
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Dashboard → Server</span>
@@ -1893,7 +1893,7 @@
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Note</span>
-                                <span class="detail-value" style="font-size:0.78rem">1-min refresh gives near-real-time display but does not change how often NOAA data is fetched server-side. Use the ⟳ Refresh button to force a live NOAA pull anytime.</span>
+                                <span class="detail-value" style="font-size:0.78rem">Vercel Global CDN caches the data for 5 minutes. 1-min UI refresh gives near-real-time updates if the backend clears its cache early, but NOAA is generally only queried once every 5 minutes globally.</span>
                             </div>
                         </div>
                     </div>
