@@ -1,0 +1,26 @@
+{
+    "name": "noaa-space-weather-extractor",
+    "version": "2.0.0",
+    "description": "Live space weather data extraction from NOAA SWPC feeds with web dashboard and webhook API",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "fetch": "node index.js --once",
+        "cli": "node index.js"
+    },
+    "keywords": [
+        "noaa",
+        "swpc",
+        "space-weather",
+        "satellite",
+        "geomagnetic",
+        "dashboard"
+    ],
+    "license": "MIT",
+    "dependencies": {
+        "cors": "^2.8.5",
+        "express": "^4.18.2",
+        "node-cron": "^3.0.3",
+        "node-fetch": "^2.7.0"
+    }
+}

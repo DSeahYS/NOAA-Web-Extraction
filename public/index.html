@@ -1,0 +1,1785 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOAA Space Weather Dashboard</title>
+    <meta name="description"
+        content="Live space weather monitoring dashboard with NOAA SWPC data feeds, alert thresholds, and real-time charts.">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d0d0d;
+            --bg-secondary: #161616;
+            --bg-card: #1c1c1c;
+            --bg-card-hover: #252525;
+            --border: #333333;
+            --border-glow: #ffffff10;
+            --text-primary: #f0f0f0;
+            --text-secondary: #a0a0a0;
+            --text-muted: #6b6b6b;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #ffffff;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-orange: #f97316;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --glow-blue: 0 0 20px #ffffff08;
+            --glow-green: 0 0 20px #10b98130;
+            --glow-red: 0 0 20px #ef444430;
+            --glow-yellow: 0 0 20px #f59e0b30;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background effect */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(ellipse at 20% 10%, #ffffff04 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 90%, #ffffff03 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Header */
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(20px);
+            padding: 0.8rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-subtitle {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 400;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: #10b98115;
+            border: 1px solid #10b98130;
+            color: var(--accent-green);
+        }
+
+        .status-badge .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .refresh-btn {
+            padding: 0.4rem 0.9rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: #606060;
+            color: var(--text-primary);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+
+        .last-update {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            padding: 0 2rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-primary);
+            position: sticky;
+            top: 56px;
+            z-index: 99;
+        }
+
+        .tab {
+            padding: 0.85rem 1.5rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.25s;
+            user-select: none;
+        }
+
+        .tab:hover {
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+        }
+
+        .tab.active {
+            color: var(--accent-cyan);
+            border-bottom-color: var(--accent-cyan);
+        }
+
+        /* Alert banner */
+        .alert-banner {
+            margin: 1rem 2rem 0;
+            padding: 0.8rem 1.2rem;
+            border-radius: 10px;
+            display: none;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.85rem;
+            animation: slideDown 0.4s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .alert-banner.critical {
+            display: flex;
+            background: linear-gradient(135deg, #ef444415, #ef444408);
+            border: 1px solid #ef444430;
+            color: #fca5a5;
+        }
+
+        .alert-banner.warning {
+            display: flex;
+            background: linear-gradient(135deg, #f9731615, #f9731608);
+            border: 1px solid #f9731630;
+            color: #fdba74;
+        }
+
+        .alert-banner.nominal {
+            display: flex;
+            background: linear-gradient(135deg, #10b98115, #10b98108);
+            border: 1px solid #10b98130;
+            color: #6ee7b7;
+        }
+
+        /* Main container */
+        .main {
+            padding: 1.5rem 2rem 3rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.35s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Charts Grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.2rem;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.2rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .chart-card:hover {
+            border-color: #505050;
+            box-shadow: 0 0 15px #ffffff06;
+        }
+
+        .chart-card.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .chart-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .chart-title .title-text {
+            position: relative;
+            cursor: help;
+            border-bottom: 1px dotted var(--text-muted);
+        }
+
+        .chart-title .title-text .info-tip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            left: 0;
+            top: calc(100% + 8px);
+            z-index: 200;
+            width: 320px;
+            background: #1c1c1c;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            font-size: 0.78rem;
+            font-weight: 400;
+            line-height: 1.5;
+            color: #d0d0d0;
+            text-transform: none;
+            letter-spacing: 0;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            transition: opacity 0.2s, visibility 0.2s;
+            pointer-events: none;
+        }
+
+        .chart-title .title-text:hover .info-tip {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .info-tip strong {
+            color: #ffffff;
+        }
+
+        .chart-title .badge {
+            padding: 0.15rem 0.5rem;
+            border-radius: 6px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .badge-nominal {
+            background: #10b98115;
+            color: var(--accent-green);
+            border: 1px solid #10b98130;
+        }
+
+        .badge-warning {
+            background: #f9731615;
+            color: var(--accent-orange);
+            border: 1px solid #f9731630;
+        }
+
+        .badge-critical {
+            background: #ef444415;
+            color: var(--accent-red);
+            border: 1px solid #ef444430;
+        }
+
+        .badge-watch {
+            background: #f59e0b15;
+            color: var(--accent-yellow);
+            border: 1px solid #f59e0b30;
+        }
+
+        .badge-info {
+            background: #3b82f615;
+            color: var(--accent-blue);
+            border: 1px solid #3b82f630;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 220px;
+        }
+
+        /* Detail cards */
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+            gap: 1.2rem;
+        }
+
+        .detail-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .detail-card:hover {
+            border-color: #505050;
+            box-shadow: 0 0 15px #ffffff06;
+        }
+
+        .detail-header {
+            padding: 1rem 1.2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, var(--bg-card), var(--bg-card-hover));
+        }
+
+        .detail-header h3 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .detail-body {
+            padding: 1rem 1.2rem;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.45rem 0;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .detail-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .detail-value.highlight {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .detail-value.green {
+            color: var(--accent-green);
+        }
+
+        .detail-value.yellow {
+            color: var(--accent-yellow);
+        }
+
+        .detail-value.orange {
+            color: var(--accent-orange);
+        }
+
+        .detail-value.red {
+            color: var(--accent-red);
+        }
+
+        .detail-value.cyan {
+            color: var(--accent-cyan);
+        }
+
+        .detail-footer {
+            padding: 0.6rem 1.2rem;
+            background: var(--bg-secondary);
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Alert center */
+        .alert-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .alert-table th {
+            text-align: left;
+            padding: 0.8rem 1rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .alert-table td {
+            padding: 0.75rem 1rem;
+            font-size: 0.82rem;
+            border-bottom: 1px solid #2a2a2a;
+            vertical-align: middle;
+        }
+
+        .alert-table tr:hover td {
+            background: var(--bg-card-hover);
+        }
+
+        .severity-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .severity-nominal {
+            background: #10b98112;
+            color: var(--accent-green);
+            border: 1px solid #10b98125;
+        }
+
+        .severity-info {
+            background: #3b82f612;
+            color: var(--accent-blue);
+            border: 1px solid #3b82f625;
+        }
+
+        .severity-watch {
+            background: #f59e0b12;
+            color: var(--accent-yellow);
+            border: 1px solid #f59e0b25;
+        }
+
+        .severity-warning {
+            background: #f9731612;
+            color: var(--accent-orange);
+            border: 1px solid #f9731625;
+        }
+
+        .severity-critical {
+            background: #ef444412;
+            color: var(--accent-red);
+            border: 1px solid #ef444425;
+        }
+
+        .progress-bar-wrap {
+            width: 100px;
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.8s ease;
+        }
+
+        .verdict-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+        }
+
+        .verdict-icon {
+            font-size: 2.5rem;
+        }
+
+        .verdict-text h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .verdict-text p {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+
+        .webhook-info {
+            margin-top: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.2rem;
+        }
+
+        .webhook-info h3 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.8rem;
+        }
+
+        .endpoint-row {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 0.45rem 0;
+        }
+
+        .endpoint-method {
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            background: #10b98115;
+            color: var(--accent-green);
+            border: 1px solid #10b98130;
+        }
+
+        .endpoint-url {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            color: var(--accent-cyan);
+        }
+
+        .endpoint-desc {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            flex-direction: column;
+            gap: 1rem;
+            color: var(--text-muted);
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                padding: 0.8rem 1rem;
+            }
+
+            .tabs {
+                padding: 0 1rem;
+            }
+
+            .main {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="header">
+        <div class="header-left">
+            <span class="header-logo">🛰️ NOAA SWPC</span>
+            <span class="header-subtitle">Space Weather Dashboard</span>
+        </div>
+        <div class="header-right">
+            <div style="text-align:right;margin-right:0.5rem">
+                <div id="liveClock"
+                    style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--text-secondary);display:flex;gap:1rem;justify-content:flex-end">
+                </div>
+                <div id="lastUpdate"
+                    style="font-family:'JetBrains Mono',monospace;font-size:0.68rem;color:var(--text-muted);margin-top:2px">
+                    Loading...</div>
+            </div>
+            <div class="status-badge" id="statusBadge">
+                <span class="dot"></span>
+                <span id="statusText">CONNECTING</span>
+            </div>
+            <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()">⟳ Refresh</button>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <div class="tab active" data-tab="charts">📊 Live Charts</div>
+        <div class="tab" data-tab="detail">📋 Detailed Data</div>
+        <div class="tab" data-tab="alerts">🚨 Alert Center</div>
+        <div class="tab" data-tab="sources">🔗 Sources</div>
+    </nav>
+
+    <div class="alert-banner" id="alertBanner">
+        <span id="alertBannerText"></span>
+    </div>
+
+    <main class="main">
+        <!-- Loading -->
+        <div class="loading" id="loadingState">
+            <div class="spinner"></div>
+            <span>Fetching live space weather data...</span>
+        </div>
+
+        <!-- Tab 1: Charts -->
+        <div class="tab-content" id="tab-charts">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+                <span style="color:var(--text-muted);font-size:0.75rem">🔍 Scroll to zoom · Drag to pan · Double-click
+                    to reset</span>
+                <button class="refresh-btn" onclick="resetAllZoom()" style="font-size:0.75rem;padding:0.3rem 0.7rem">↺
+                    Reset All Zoom</button>
+            </div>
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <span class="title-text">☀️ Solar Wind — Bz (IMF)
+                            <span class="info-tip"><strong>Interplanetary Magnetic Field (Bz
+                                    component)</strong><br>Measures the north-south direction of the solar wind's
+                                magnetic field. When Bz turns <strong>southward (negative)</strong>, it couples with
+                                Earth's magnetosphere and can trigger geomagnetic storms. Values below <strong>-5
+                                    nT</strong> indicate storm conditions; below <strong>-10 nT</strong> signals severe
+                                storms.</span>
+                        </span>
+                        <span class="badge" id="badge-sw"></span>
+                    </div>
+                    <div class="chart-wrapper"><canvas id="chartBz"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <span class="title-text">💨 Solar Wind — Speed
+                            <span class="info-tip"><strong>Solar Wind Bulk Speed</strong><br>The velocity of charged
+                                particles streaming from the Sun. Normal speed is <strong>300–400 km/s</strong>. Speeds
+                                above <strong>500 km/s</strong> indicate fast solar wind streams or coronal mass
+                                ejections (CMEs) that can compress Earth's magnetosphere and drive geomagnetic
+                                storms.</span>
+                        </span>
+                    </div>
+                    <div class="chart-wrapper"><canvas id="chartSpeed"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <span class="title-text">🧲 Kp Index
+                            <span class="info-tip"><strong>Planetary K-index</strong><br>A global index of geomagnetic
+                                activity on a <strong>0–9 scale</strong>. Kp 0–3 is quiet, Kp 4 is active, and Kp ≥ 5
+                                means a <strong>geomagnetic storm</strong> (G1+). Higher Kp values push aurora
+                                visibility to lower latitudes and can affect power grids, GPS, and satellite
+                                operations.</span>
+                        </span>
+                        <span class="badge" id="badge-kp"></span>
+                    </div>
+                    <div class="chart-wrapper"><canvas id="chartKp"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <span class="title-text">☢️ X-Ray Flux (Solar Flares)
+                            <span class="info-tip"><strong>GOES X-Ray Flux (1–8 Å)</strong><br>Measures X-ray intensity
+                                from the Sun, used to classify solar flares. <strong>C-class</strong> (10⁻⁶) are minor,
+                                <strong>M-class</strong> (10⁻⁵) cause radio blackouts, and <strong>X-class</strong>
+                                (10⁻⁴+) are the most powerful, causing widespread HF radio disruption and potential
+                                radiation hazards.</span>
+                        </span>
+                        <span class="badge" id="badge-xray"></span>
+                    </div>
+                    <div class="chart-wrapper"><canvas id="chartXray"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <span class="title-text">⚛️ Proton Flux (≥10 MeV)
+                            <span class="info-tip"><strong>High-Energy Proton Flux</strong><br>Counts energetic protons
+                                (≥10 MeV) from solar particle events. Normal background is <strong>&lt;1 pfu</strong>.
+                                Above <strong>10 pfu</strong> triggers an S1 radiation storm warning. High proton flux
+                                is hazardous to astronauts, can damage satellites, and disrupts polar HF radio
+                                communications.</span>
+                        </span>
+                        <span class="badge" id="badge-proton"></span>
+                    </div>
+                    <div class="chart-wrapper"><canvas id="chartProton"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">
+                        <span class="title-text">⚡ Electron Flux (≥2 MeV)
+                            <span class="info-tip"><strong>Relativistic Electron Flux</strong><br>Measures high-energy
+                                electrons in the radiation belts. Above <strong>1,000 pfu</strong> there is a risk of
+                                <strong>deep dielectric charging</strong> — electrons penetrate spacecraft shielding and
+                                build up charge that can discharge and damage electronics. Sustained elevated flux
+                                requires operational caution for satellite operators.</span>
+                        </span>
+                        <span class="badge" id="badge-electron"></span>
+                    </div>
+                    <div class="chart-wrapper"><canvas id="chartElectron"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Detailed Data -->
+        <div class="tab-content" id="tab-detail">
+            <div class="detail-grid" id="detailGrid"></div>
+        </div>
+
+        <!-- Tab 3: Alert Center -->
+        <div class="tab-content" id="tab-alerts">
+            <div id="alertCenter"></div>
+        </div>
+
+        <!-- Tab 4: Sources -->
+        <div class="tab-content" id="tab-sources">
+            <div style="max-width:900px">
+                <div class="verdict-card" style="margin-bottom:1.5rem">
+                    <div class="verdict-icon">🛠️</div>
+                    <div class="verdict-text">
+                        <h2 style="color:var(--text-primary)">Data Sources & Feed URLs</h2>
+                        <p>All data is fetched directly from NOAA’s Space Weather Prediction Center (SWPC) public APIs.
+                            No third-party intermediaries. Click any URL to view the raw feed in your browser.</p>
+                    </div>
+                </div>
+
+                <table class="alert-table"
+                    style="background:var(--bg-card);border-radius:12px;border:1px solid var(--border);overflow:hidden">
+                    <thead>
+                        <tr>
+                            <th>Feed</th>
+                            <th>Format</th>
+                            <th>Update Rate</th>
+                            <th>Source URL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">☀️ Solar Wind — Magnetic Field</td>
+                            <td><span class="severity-pill severity-info">JSON</span></td>
+                            <td>~1 min</td>
+                            <td><a href="https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json"
+                                    target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/products/solar-wind/mag-1-day.json</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">💨 Solar Wind — Plasma</td>
+                            <td><span class="severity-pill severity-info">JSON</span></td>
+                            <td>~1 min</td>
+                            <td><a href="https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json"
+                                    target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">🧲 Kp Index (1-min estimates)</td>
+                            <td><span class="severity-pill severity-info">JSON</span></td>
+                            <td>~1 min</td>
+                            <td><a href="https://services.swpc.noaa.gov/json/planetary_k_index_1m.json" target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/json/planetary_k_index_1m.json</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">🧲 Kp Index (3-hour official)</td>
+                            <td><span class="severity-pill severity-info">JSON</span></td>
+                            <td>~3 hr</td>
+                            <td><a href="https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
+                                    target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/products/noaa-planetary-k-index.json</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">☢️ X-Ray Flux (GOES primary)</td>
+                            <td><span class="severity-pill severity-info">JSON</span></td>
+                            <td>~1 min</td>
+                            <td><a href="https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json"
+                                    target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">⚛️ Proton Flux (GOES primary)</td>
+                            <td><span class="severity-pill severity-info">JSON</span></td>
+                            <td>~5 min</td>
+                            <td><a href="https://services.swpc.noaa.gov/json/goes/primary/integral-protons-1-day.json"
+                                    target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/json/goes/primary/integral-protons-1-day.json</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">⚡ Electron Flux (GOES primary)</td>
+                            <td><span class="severity-pill severity-info">JSON</span></td>
+                            <td>~5 min</td>
+                            <td><a href="https://services.swpc.noaa.gov/json/goes/primary/integral-electrons-1-day.json"
+                                    target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/json/goes/primary/integral-electrons-1-day.json</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">📡 F10.7 cm Solar Radio Flux</td>
+                            <td><span class="severity-pill severity-info">JSON</span></td>
+                            <td>~daily</td>
+                            <td><a href="https://services.swpc.noaa.gov/json/f107_cm_flux.json" target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/json/f107_cm_flux.json</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:600;color:var(--text-primary)">🌌 Aurora Hemispheric Power</td>
+                            <td><span class="severity-pill severity-watch">TXT</span></td>
+                            <td>~5 min</td>
+                            <td><a href="https://services.swpc.noaa.gov/text/aurora-nowcast-hemi-power.txt"
+                                    target="_blank"
+                                    style="color:#a0a0a0;word-break:break-all;font-family:'JetBrains Mono',monospace;font-size:0.72rem">services.swpc.noaa.gov/text/aurora-nowcast-hemi-power.txt</a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="webhook-info" style="margin-top:1.5rem">
+                    <h3>About These Feeds</h3>
+                    <div style="font-size:0.82rem;color:var(--text-secondary);line-height:1.7">
+                        <p>All feeds are provided by <strong style="color:var(--text-primary)">NOAA’s Space Weather
+                                Prediction Center (SWPC)</strong>, a division of the National Weather Service.</p>
+                        <p style="margin-top:0.6rem"><strong style="color:var(--text-primary)">Satellite
+                                Sources:</strong> DSCOVR (Deep Space Climate Observatory) at L1 for solar wind data.
+                            GOES-16/18 (Geostationary Operational Environmental Satellites) for X-ray, proton, and
+                            electron flux.</p>
+                        <p style="margin-top:0.6rem"><strong style="color:var(--text-primary)">Polling Policy:</strong>
+                            NOAA allows polling up to once per minute. This dashboard polls every 30 minutes server-side
+                            and auto-refreshes the UI every 5 minutes.</p>
+                        <p style="margin-top:0.6rem"><strong style="color:var(--text-primary)">Data License:</strong>
+                            All NOAA data is in the public domain and free to use without restriction.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // ─── State ───────────────────────────────────────────────────────────────────
+
+        let statusData = null;
+        let charts = {};
+
+        // ─── Tab Switching ───────────────────────────────────────────────────────────
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // ─── Fetch Data ──────────────────────────────────────────────────────────────
+
+        async function fetchData() {
+            try {
+                const [status, swHist, kpHist, xrayHist, protonHist, electronHist] = await Promise.all([
+                    fetch('/api/status').then(r => r.json()),
+                    fetch('/api/history/solar-wind').then(r => r.json()),
+                    fetch('/api/history/kp').then(r => r.json()),
+                    fetch('/api/history/xrays').then(r => r.json()),
+                    fetch('/api/history/protons').then(r => r.json()),
+                    fetch('/api/history/electrons').then(r => r.json()),
+                ]);
+
+                statusData = status;
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('tab-charts').classList.add('active');
+
+                updateHeader(status);
+                updateAlertBanner(status);
+                renderCharts(swHist, kpHist, xrayHist, protonHist, electronHist, status);
+                renderDetailTab(status);
+                renderAlertCenter(status);
+            } catch (err) {
+                console.error('Fetch error:', err);
+                document.getElementById('statusText').textContent = 'ERROR';
+                document.getElementById('statusBadge').style.borderColor = '#ef444430';
+                document.getElementById('statusBadge').style.color = '#ef4444';
+            }
+        }
+
+        async function manualRefresh() {
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            btn.textContent = '⟳ Fetching...';
+            try {
+                await fetch('/api/fetch', { method: 'POST' });
+                await fetchData();
+            } catch (e) { console.error(e); }
+            btn.disabled = false;
+            btn.textContent = '⟳ Refresh';
+        }
+
+        // ─── Header ──────────────────────────────────────────────────────────────────
+
+        function formatTZ(date, tz, label) {
+            return label + ' ' + date.toLocaleString('en-GB', {
+                timeZone: tz,
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                day: '2-digit', month: 'short', year: 'numeric',
+                hour12: false,
+            });
+        }
+
+        function tickClock() {
+            const now = new Date();
+            document.getElementById('liveClock').innerHTML =
+                `<span>🇸🇬 ${formatTZ(now, 'Asia/Singapore', 'SGT')}</span>` +
+                `<span>🌐 ${formatTZ(now, 'UTC', 'UTC')}</span>`;
+        }
+        tickClock();
+        setInterval(tickClock, 1000);
+
+        function updateHeader(data) {
+            const time = new Date(data.extraction_time);
+            const sgt = formatTZ(time, 'Asia/Singapore', 'SGT');
+            const utc = formatTZ(time, 'UTC', 'UTC');
+            document.getElementById('lastUpdate').textContent = `Last fetch: ${sgt}  •  ${utc}`;
+            const alertCount = data.alerts.length;
+            const badge = document.getElementById('statusBadge');
+            const statusText = document.getElementById('statusText');
+            if (alertCount === 0) {
+                statusText.textContent = 'ALL NOMINAL';
+                badge.style.borderColor = '#10b98130';
+                badge.style.color = '#10b981';
+            } else {
+                const sev = data.alerts[0].severity;
+                statusText.textContent = `${alertCount} ALERT${alertCount > 1 ? 'S' : ''}`;
+                const col = sev === 'CRITICAL' ? '#ef4444' : sev === 'WARNING' ? '#f97316' : '#f59e0b';
+                badge.style.borderColor = col + '30';
+                badge.style.color = col;
+            }
+        }
+
+        function updateAlertBanner(data) {
+            const banner = document.getElementById('alertBanner');
+            if (data.alerts.length === 0) {
+                banner.className = 'alert-banner nominal';
+                document.getElementById('alertBannerText').textContent = '✅ All systems nominal — no active space weather alerts.';
+            } else {
+                const top = data.alerts[0];
+                const cls = top.severity === 'CRITICAL' ? 'critical' : 'warning';
+                banner.className = 'alert-banner ' + cls;
+                document.getElementById('alertBannerText').textContent = data.alerts.map(a => `${a.emoji} ${a.message}`).join('  •  ');
+            }
+        }
+
+        // ─── Charts ──────────────────────────────────────────────────────────────────
+
+        const chartDefaults = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 600, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1c1c1cee',
+                    borderColor: '#333333',
+                    borderWidth: 1,
+                    titleFont: { family: 'Inter' },
+                    bodyFont: { family: 'JetBrains Mono', size: 11 },
+                    padding: 10,
+                    cornerRadius: 8,
+                },
+                zoom: {
+                    pan: {
+                        enabled: true,
+                        mode: 'xy',
+                        modifierKey: null,
+                    },
+                    zoom: {
+                        wheel: { enabled: true, modifierKey: null },
+                        pinch: { enabled: true },
+                        drag: { enabled: false },
+                        mode: 'xy',
+                    },
+                    limits: {
+                        x: { minRange: 60000 },
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    grid: { color: '#2a2a2a' },
+                    ticks: { color: '#6b6b6b', font: { size: 10 }, maxTicksLimit: 8 },
+                },
+                y: {
+                    grid: { color: '#2a2a2a' },
+                    ticks: { color: '#6b6b6b', font: { size: 10 } },
+                },
+            },
+        };
+
+        function parseTime(t) {
+            if (!t) return null;
+            // Handle both "2026-02-20 13:30:00.000" and "2026-02-20T13:30:00Z" formats
+            return new Date(t.replace(' ', 'T').replace(/\.000$/, '') + (t.includes('Z') || t.includes('T') ? '' : 'Z'));
+        }
+
+        function makeLine(data, xKey, yKey, color, label) {
+            return {
+                labels: data.map(d => parseTime(d[xKey])),
+                datasets: [{
+                    label: label,
+                    data: data.map(d => d[yKey]),
+                    borderColor: color,
+                    backgroundColor: color + '15',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    fill: true,
+                    tension: 0.3,
+                }],
+            };
+        }
+
+        function thresholdLine(value, color, labelText, dash) {
+            return {
+                type: 'line',
+                yMin: value,
+                yMax: value,
+                borderColor: color + '80',
+                borderWidth: 1.5,
+                borderDash: dash || [],
+                label: labelText ? {
+                    display: true,
+                    content: labelText,
+                    position: 'end',
+                    backgroundColor: color + '25',
+                    color: color,
+                    font: { size: 9, family: 'JetBrains Mono', weight: '500' },
+                    padding: { top: 2, bottom: 2, left: 5, right: 5 },
+                    borderRadius: 3,
+                } : undefined,
+            };
+        }
+
+        function renderCharts(sw, kp, xray, proton, electron, status) {
+            // Destroy existing charts
+            Object.values(charts).forEach(c => c.destroy());
+            charts = {};
+
+            // Badge updates
+            updateBadge('badge-sw', status.metrics?.solar_wind?.status);
+            updateBadge('badge-kp', status.metrics?.kp_index?.status);
+            updateBadge('badge-xray', status.metrics?.xray_flux?.status);
+            updateBadge('badge-proton', status.metrics?.proton_flux?.status);
+            updateBadge('badge-electron', status.metrics?.electron_flux?.status);
+
+            // Bz chart with threshold lines
+            const bzData = sw.mag || [];
+            charts.bz = new Chart(document.getElementById('chartBz'), {
+                type: 'line',
+                data: {
+                    labels: bzData.map(d => parseTime(d.time)),
+                    datasets: [
+                        { label: 'Bz GSM (nT)', data: bzData.map(d => d.bz_gsm), borderColor: '#3b82f6', backgroundColor: '#3b82f615', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 },
+                        { label: 'Bt (nT)', data: bzData.map(d => d.bt), borderColor: '#8b5cf650', borderWidth: 1, pointRadius: 0, borderDash: [4, 4], fill: false, tension: 0.3 },
+                    ],
+                },
+                options: {
+                    ...chartDefaults,
+                    plugins: {
+                        ...chartDefaults.plugins,
+                        annotation: {
+                            annotations: {
+                                stormLine: thresholdLine(-5, '#f97316', 'Storm (Bz ≤ -5)'),
+                                severeLine: thresholdLine(-10, '#ef4444', 'Severe (Bz ≤ -10)'),
+                                zeroLine: thresholdLine(0, '#555555', null, [4, 4]),
+                            }
+                        },
+                    },
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: { ...chartDefaults.scales.y, title: { display: true, text: 'nT', color: '#6b6b6b', font: { size: 10 } } },
+                    },
+                },
+            });
+
+            // Speed chart with threshold line
+            const plasmaData = sw.plasma || [];
+            charts.speed = new Chart(document.getElementById('chartSpeed'), {
+                type: 'line',
+                data: makeLine(plasmaData, 'time', 'speed', '#f97316', 'Speed (km/s)'),
+                options: {
+                    ...chartDefaults,
+                    plugins: {
+                        ...chartDefaults.plugins,
+                        annotation: {
+                            annotations: {
+                                fastWind: thresholdLine(500, '#f97316', 'Fast Wind (500 km/s)'),
+                                veryFast: thresholdLine(700, '#ef4444', 'Extreme (700 km/s)'),
+                            }
+                        },
+                    },
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: { ...chartDefaults.scales.y, title: { display: true, text: 'km/s', color: '#6b6b6b', font: { size: 10 } } },
+                    },
+                },
+            });
+
+            // Kp bar chart
+            const kpData = kp.kp || [];
+            // Downsample kp data to max 100 bars for readability
+            const kpDown = kpData.length > 100 ? kpData.filter((_, i) => i % Math.ceil(kpData.length / 100) === 0) : kpData;
+            charts.kp = new Chart(document.getElementById('chartKp'), {
+                type: 'bar',
+                data: {
+                    labels: kpDown.map(d => parseTime(d.time)),
+                    datasets: [{
+                        label: 'Kp Index',
+                        data: kpDown.map(d => d.kp_index),
+                        backgroundColor: kpDown.map(d => {
+                            const kp = d.kp_index;
+                            if (kp >= 7) return '#ef4444';
+                            if (kp >= 5) return '#f97316';
+                            if (kp >= 4) return '#f59e0b';
+                            return '#10b981';
+                        }),
+                        borderWidth: 0,
+                        borderRadius: 2,
+                    }],
+                },
+                options: {
+                    ...chartDefaults,
+                    plugins: {
+                        ...chartDefaults.plugins,
+                        annotation: {
+                            annotations: {
+                                g1: thresholdLine(5, '#f97316', 'G1 Minor Storm'),
+                                g3: thresholdLine(7, '#ef4444', 'G3 Strong Storm'),
+                                active: thresholdLine(4, '#f59e0b', 'Active', [4, 4]),
+                            }
+                        },
+                    },
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: { ...chartDefaults.scales.y, min: 0, max: 9, title: { display: true, text: 'Kp', color: '#6b6b6b', font: { size: 10 } } },
+                    },
+                },
+            });
+
+            // X-ray log chart
+            const xrayData = xray.xrays || [];
+            charts.xray = new Chart(document.getElementById('chartXray'), {
+                type: 'line',
+                data: makeLine(xrayData, 'time', 'flux', '#ef4444', 'X-Ray Flux (W/m²)'),
+                options: {
+                    ...chartDefaults,
+                    plugins: {
+                        ...chartDefaults.plugins,
+                        annotation: {
+                            annotations: {
+                                cClass: thresholdLine(1e-6, '#10b981', 'C-class', [4, 4]),
+                                mClass: thresholdLine(1e-5, '#f97316', 'M-class (R1 Blackout)'),
+                                xClass: thresholdLine(1e-4, '#ef4444', 'X-class (R3 Blackout)'),
+                            }
+                        },
+                    },
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: {
+                            ...chartDefaults.scales.y, type: 'logarithmic',
+                            title: { display: true, text: 'W/m²', color: '#6b6b6b', font: { size: 10 } },
+                            ticks: {
+                                color: '#6b6b6b', font: { size: 10 },
+                                callback: v => v.toExponential(0),
+                            },
+                        },
+                    },
+                },
+            });
+
+            // Proton log chart
+            const protonData = proton.protons || [];
+            charts.proton = new Chart(document.getElementById('chartProton'), {
+                type: 'line',
+                data: makeLine(protonData, 'time', 'flux', '#f59e0b', 'Proton Flux (pfu)'),
+                options: {
+                    ...chartDefaults,
+                    plugins: {
+                        ...chartDefaults.plugins,
+                        annotation: {
+                            annotations: {
+                                s1: thresholdLine(10, '#f59e0b', 'S1 Minor Storm'),
+                                s2: thresholdLine(100, '#f97316', 'S2 Moderate'),
+                                s3: thresholdLine(1000, '#ef4444', 'S3 Strong'),
+                            }
+                        },
+                    },
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: {
+                            ...chartDefaults.scales.y, type: 'logarithmic',
+                            title: { display: true, text: 'pfu', color: '#6b6b6b', font: { size: 10 } },
+                            ticks: { color: '#6b6b6b', font: { size: 10 }, callback: v => v >= 1 ? v : v.toExponential(0) },
+                        },
+                    },
+                },
+            });
+
+            // Electron log chart
+            const electronData = electron.electrons || [];
+            charts.electron = new Chart(document.getElementById('chartElectron'), {
+                type: 'line',
+                data: makeLine(electronData, 'time', 'flux', '#8b5cf6', 'Electron Flux (pfu)'),
+                options: {
+                    ...chartDefaults,
+                    plugins: {
+                        ...chartDefaults.plugins,
+                        annotation: {
+                            annotations: {
+                                charging: thresholdLine(1000, '#f97316', 'Charging Alert (1000 pfu)'),
+                            }
+                        },
+                    },
+                    scales: {
+                        ...chartDefaults.scales,
+                        y: {
+                            ...chartDefaults.scales.y, type: 'logarithmic',
+                            title: { display: true, text: 'pfu', color: '#6b6b6b', font: { size: 10 } },
+                            ticks: { color: '#6b6b6b', font: { size: 10 }, callback: v => v >= 1 ? v : v.toExponential(0) },
+                        },
+                    },
+                },
+            });
+        }
+
+        function resetAllZoom() {
+            Object.values(charts).forEach(c => c.resetZoom());
+        }
+        function updateBadge(id, status) {
+            const el = document.getElementById(id);
+            if (!el || !status) return;
+            const map = { 'NOMINAL': 'badge-nominal', 'INFO': 'badge-info', 'WATCH': 'badge-watch', 'WARNING': 'badge-warning', 'CRITICAL': 'badge-critical' };
+            el.className = 'badge ' + (map[status] || 'badge-nominal');
+            el.textContent = status;
+        }
+
+        // ─── Detailed Data Tab ──────────────────────────────────────────────────────
+
+        function riskLevel(val, t1, t2, t3) {
+            if (val == null || isNaN(val)) return { level: 'UNKNOWN', cls: '', bar: 0 };
+            if (t3 !== undefined && val >= t3) return { level: 'EXTREME', cls: 'val-critical', bar: 100 };
+            if (val >= t2) return { level: 'HIGH', cls: 'val-warning', bar: 75 };
+            if (val >= t1) return { level: 'MODERATE', cls: 'val-watch', bar: 50 };
+            return { level: 'LOW', cls: 'val-nominal', bar: 15 };
+        }
+
+        function riskRow(icon, name, risk, detail) {
+            const pillMap = { LOW: 'severity-nominal', MODERATE: 'severity-watch', HIGH: 'severity-warning', EXTREME: 'severity-critical', UNKNOWN: 'severity-info' };
+            return `<tr>
+                <td style="font-weight:600;color:var(--text-primary)">${icon} ${name}</td>
+                <td><span class="severity-pill ${pillMap[risk.level]}">${risk.level}</span></td>
+                <td style="color:var(--text-secondary);font-size:0.78rem">${detail}</td>
+            </tr>`;
+        }
+
+        function getFlareClass(flux) {
+            if (!flux || flux <= 0) return 'Below A';
+            if (flux < 1e-7) return 'A';
+            if (flux < 1e-6) return 'B';
+            if (flux < 1e-5) return 'C';
+            if (flux < 1e-4) return 'M';
+            return 'X';
+        }
+
+        function getGScale(kp) {
+            if (kp == null) return '—';
+            if (kp >= 9) return 'G5 — Extreme';
+            if (kp >= 8) return 'G4 — Severe';
+            if (kp >= 7) return 'G3 — Strong';
+            if (kp >= 6) return 'G2 — Moderate';
+            if (kp >= 5) return 'G1 — Minor';
+            if (kp >= 4) return 'Active';
+            return 'Quiet';
+        }
+
+        function getSScale(pfu10) {
+            if (pfu10 == null) return '—';
+            if (pfu10 >= 100000) return 'S5 — Extreme';
+            if (pfu10 >= 10000) return 'S4 — Severe';
+            if (pfu10 >= 1000) return 'S3 — Strong';
+            if (pfu10 >= 100) return 'S2 — Moderate';
+            if (pfu10 >= 10) return 'S1 — Minor';
+            return 'None';
+        }
+
+        function getRScale(flux) {
+            if (!flux) return '—';
+            if (flux >= 1e-3) return 'R5 — Extreme';
+            if (flux >= 5e-4) return 'R4 — Severe';
+            if (flux >= 1e-4) return 'R3 — Strong';
+            if (flux >= 5e-5) return 'R2 — Moderate';
+            if (flux >= 1e-5) return 'R1 — Minor';
+            return 'None';
+        }
+
+        function renderDetailTab(data) {
+            const d = data.data;
+            const m = data.metrics || {};
+            const grid = document.getElementById('detailGrid');
+
+            // ── Derived risk values ──
+            const bz = d.solar_wind_mag?.bz_gsm;
+            const speed = d.solar_wind_plasma?.speed;
+            const density = d.solar_wind_plasma?.density;
+            const kp = d.kp_index_1m?.kp_index;
+            const xFlux = d.xray_flux?.flux;
+            const eFl2 = d.electron_flux?.flux;
+            const eFl08 = d.electron_flux_08?.flux;
+            const pFl10 = d.proton_flux?.flux;
+            const pFl50 = d.proton_flux_50?.flux;
+            const pFl100 = d.proton_flux_100?.flux;
+            const f107 = d.f107_flux?.flux;
+            const hemiPower = d.aurora_power?.hemispheric_power_gw;
+
+            // Deep dielectric charging: driven by ≥2 MeV electrons
+            const ddcRisk = riskLevel(eFl2, 100, 1000, 10000);
+            const ddcDetail = `≥2 MeV e⁻ flux: ${eFl2 != null ? fmt(eFl2, 1) + ' pfu' : 'N/A'}. Internal charging from high-energy electrons penetrating shielding.`;
+
+            // Surface charging: driven by ≥0.8 MeV electrons + low density
+            const scRisk = (eFl08 > 5000 || (kp >= 5 && density < 3)) ? riskLevel(100, 10, 50) : riskLevel(eFl08, 1000, 5000, 50000);
+            const scDetail = `≥0.8 MeV e⁻: ${eFl08 != null ? fmt(eFl08, 0) + ' pfu' : 'N/A'}, Density: ${density != null ? fmt(density, 1) + ' p/cm³' : 'N/A'}. Differential charging on satellite surfaces.`;
+
+            // SEU risk: driven by ≥100 MeV protons (most penetrating)
+            const seuRisk = riskLevel(pFl100, 0.5, 1, 10);
+            const seuDetail = `≥100 MeV p⁺: ${pFl100 != null ? fmt(pFl100, 3) + ' pfu' : 'N/A'}. High-energy protons cause single-event upsets in electronics.`;
+
+            // Solar panel degradation: driven by ≥10 MeV protons (cumulative)
+            const panelRisk = riskLevel(pFl10, 10, 100, 1000);
+            const panelDetail = `≥10 MeV p⁺: ${pFl10 != null ? fmt(pFl10, 2) + ' pfu' : 'N/A'}. Proton damage to solar cell junctions reduces power output.`;
+
+            // Atmospheric drag: driven by F10.7 + Kp (heating → expansion)
+            const dragScore = (f107 || 0) + (kp || 0) * 15;
+            const dragRisk = riskLevel(dragScore, 120, 180, 250);
+            const dragDetail = `F10.7: ${f107 != null ? fmt(f107, 1) + ' SFU' : 'N/A'}, Kp: ${kp != null ? fmt(kp) : 'N/A'}. UV/EUV heating expands thermosphere; LEO satellites experience increased drag.`;
+
+            // HF Radio blackout: driven by X-ray flux
+            const rScale = getRScale(xFlux);
+            const hfRisk = riskLevel(xFlux, 1e-5, 1e-4, 1e-3);
+            const hfDetail = `X-ray: ${xFlux != null ? xFlux.toExponential(2) + ' W/m²' : 'N/A'} (${getFlareClass(xFlux)}-class). NOAA Scale: ${rScale}.`;
+
+            // GPS / Navigation: driven by Kp + protons (ionospheric irregularities)
+            const gpsScore = (kp || 0) + (pFl10 > 10 ? 3 : 0) + (hemiPower > 50 ? 2 : 0);
+            const gpsRisk = riskLevel(gpsScore, 5, 7, 9);
+            const gpsDetail = `Kp: ${kp != null ? fmt(kp) : 'N/A'}, Protons: ${pFl10 != null ? fmt(pFl10, 1) + ' pfu' : 'N/A'}, Hemi Power: ${hemiPower != null ? fmt(hemiPower, 0) + ' GW' : 'N/A'}. Ionospheric scintillation degrades GPS accuracy.`;
+
+            grid.innerHTML = `
+        <div class="detail-card" style="grid-column:1/-1">
+            <div class="detail-header">
+                <h3>🛡️ Satellite Operations Advisory</h3>
+                <span class="severity-pill severity-info">DERIVED</span>
+            </div>
+            <div class="detail-body" style="padding:0">
+                <table class="alert-table" style="margin:0;width:100%">
+                    <thead><tr><th>Hazard</th><th>Risk</th><th>Assessment</th></tr></thead>
+                    <tbody>
+                        ${riskRow('⚡', 'Deep Dielectric Charging', ddcRisk, ddcDetail)}
+                        ${riskRow('🔋', 'Surface Charging', scRisk, scDetail)}
+                        ${riskRow('💥', 'Single Event Upsets (SEU)', seuRisk, seuDetail)}
+                        ${riskRow('☀️', 'Solar Panel Degradation', panelRisk, panelDetail)}
+                        ${riskRow('🌊', 'Atmospheric Drag (LEO)', dragRisk, dragDetail)}
+                        ${riskRow('📻', 'HF Radio Blackout', hfRisk, hfDetail)}
+                        ${riskRow('📡', 'GPS / Navigation Errors', gpsRisk, gpsDetail)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        ${detailCard('☀️ Solar Wind — Magnetic Field (DSCOVR)', m.solar_wind, [
+                { label: 'Bz GSM', value: fmt(bz), unit: 'nT', highlight: true, color: colorByVal(bz, -5, -10, true) },
+                { label: 'Bx GSM', value: fmt(d.solar_wind_mag?.bx_gsm), unit: 'nT' },
+                { label: 'By GSM', value: fmt(d.solar_wind_mag?.by_gsm), unit: 'nT' },
+                { label: 'Bt (total field)', value: fmt(d.solar_wind_mag?.bt), unit: 'nT' },
+                { label: 'Southward?', value: bz != null ? (bz < 0 ? '⚠️ YES — coupling with magnetosphere' : '✅ No — northward / shielded') : 'N/A' },
+            ], d.solar_wind_mag?.time_tag)}
+
+        ${detailCard('💨 Solar Wind — Plasma (DSCOVR)', m.solar_wind, [
+                { label: 'Bulk Speed', value: fmt(speed), unit: 'km/s', highlight: true, color: colorByVal(speed, 500, 700) },
+                { label: 'Proton Density', value: fmt(density), unit: 'p/cm³' },
+                { label: 'Temperature', value: fmtTemp(d.solar_wind_plasma?.temperature), unit: 'K' },
+                { label: 'Dynamic Pressure', value: speed && density ? fmt(density * speed * speed * 1.6726e-6 / 1e9, 2) : 'N/A', unit: 'nPa' },
+                { label: 'Speed Category', value: speed != null ? (speed >= 700 ? '🔴 Extreme' : speed >= 500 ? '🟠 Fast' : speed >= 400 ? '🟡 Elevated' : '🟢 Normal') : 'N/A' },
+            ], d.solar_wind_plasma?.time_tag)}
+
+        ${detailCard('🧲 Geomagnetic Activity', m.kp_index, [
+                { label: 'Kp (1-min est.)', value: fmt(kp), highlight: true, color: colorKp(kp) },
+                { label: 'Kp (3-hr official)', value: fmt(d.kp_index_official?.kp) },
+                { label: 'NOAA G-Scale', value: getGScale(kp), highlight: true },
+                { label: 'Geomagnetic Conditions', value: kp != null ? (kp >= 7 ? '🔴 Major storm — satellite anomalies likely' : kp >= 5 ? '🟠 Storm — increased drag & charging' : kp >= 4 ? '🟡 Active — monitor closely' : '🟢 Quiet') : 'N/A' },
+            ], d.kp_index_1m?.time_tag)}
+
+        ${detailCard('☢️ X-Ray Flux — Solar Flares (GOES)', m.xray_flux, [
+                { label: 'Long (0.1-0.8nm)', value: xFlux?.toExponential(2) || 'N/A', unit: 'W/m²', highlight: true, color: colorXray(xFlux) },
+                { label: 'Short (0.05-0.4nm)', value: d.xray_flux_short?.flux?.toExponential(2) || 'N/A', unit: 'W/m²' },
+                { label: 'Flare Class', value: getFlareClass(xFlux), highlight: true, color: colorXray(xFlux) },
+                { label: 'NOAA R-Scale', value: getRScale(xFlux) },
+                { label: 'Impact', value: xFlux >= 1e-5 ? '⚠️ HF radio degradation on sunlit side' : '✅ No significant HF impact' },
+            ], d.xray_flux?.time_tag)}
+
+        ${detailCard('⚛️ Proton Flux — Solar Energetic Particles (GOES)', m.proton_flux, [
+                { label: '≥10 MeV', value: fmt(pFl10, 4), unit: 'pfu', highlight: true, color: colorByVal(pFl10, 10, 100) },
+                { label: '≥50 MeV', value: fmt(pFl50, 4), unit: 'pfu', color: colorByVal(pFl50, 1, 10) },
+                { label: '≥100 MeV', value: fmt(pFl100, 4), unit: 'pfu', color: colorByVal(pFl100, 0.5, 1) },
+                { label: 'NOAA S-Scale', value: getSScale(pFl10), highlight: true },
+                { label: 'Shielding Concern', value: pFl100 > 1 ? '🔴 ≥100 MeV penetrates most shielding' : pFl50 > 1 ? '🟠 ≥50 MeV — thin shielding at risk' : '🟢 Background levels' },
+                { label: 'EVA / Astronaut Risk', value: pFl10 >= 10 ? '⚠️ Elevated — EVA not recommended' : '✅ Acceptable' },
+            ], d.proton_flux?.time_tag)}
+
+        ${detailCard('⚡ Electron Flux — Radiation Belt (GOES)', m.electron_flux, [
+                { label: '≥2 MeV (relativistic)', value: fmt(eFl2, 1), unit: 'pfu', highlight: true, color: colorByVal(eFl2, 1000, 10000) },
+                { label: '≥0.8 MeV', value: fmt(eFl08, 0), unit: 'pfu', color: colorByVal(eFl08, 5000, 50000) },
+                { label: 'Charging Risk', value: eFl2 >= 1000 ? '🔴 Deep dielectric charging threshold exceeded' : eFl2 >= 100 ? '🟡 Elevated — monitor trend' : '🟢 Below threshold' },
+                { label: 'Operational Advice', value: eFl2 >= 1000 ? '⚠️ Consider safe-mode for vulnerable subsystems' : '✅ Normal operations' },
+            ], d.electron_flux?.time_tag)}
+
+        ${detailCard('📻 F10.7 Solar Radio Flux (10.7cm)', m.f107_flux, [
+                { label: 'Flux', value: fmt(f107), unit: 'SFU', highlight: true, color: colorByVal(f107, 150, 200) },
+                { label: 'Solar Activity', value: f107 != null ? (f107 >= 200 ? '🔴 Very High' : f107 >= 150 ? '🟠 High' : f107 >= 100 ? '🟡 Moderate' : '🟢 Low') : 'N/A' },
+                { label: 'LEO Drag Impact', value: f107 >= 150 ? '⚠️ Increased thermospheric density — adjust orbit predictions' : '✅ Normal drag levels' },
+                { label: 'Usage', value: 'Key input for atmosphere models (NRLMSISE-00, JB2008) used in orbit propagation' },
+            ], d.f107_flux?.time_tag)}
+
+        ${detailCard('🌌 Aurora — Hemispheric Power', m.aurora_power, [
+                { label: 'Power', value: fmt(hemiPower), unit: 'GW', highlight: true, color: colorByVal(hemiPower, 50, 100) },
+                { label: 'Activity Level', value: hemiPower != null ? (hemiPower >= 100 ? '🔴 Major storm auroral zone expansion' : hemiPower >= 50 ? '🟠 Active — aurora at mid-latitudes' : hemiPower >= 20 ? '🟡 Moderate' : '🟢 Quiet') : 'N/A' },
+                { label: 'Implication', value: hemiPower >= 50 ? '⚠️ Ionospheric irregularities — polar HF & GPS degraded' : '✅ Normal ionosphere' },
+            ], null)}
+    `;
+        }
+
+        function detailCard(title, metric, rows, timestamp) {
+            const status = metric?.status || 'NOMINAL';
+            const statusEmoji = metric?.status_emoji || '✅';
+            const sevClass = 'severity-' + status.toLowerCase();
+            return `
+        <div class="detail-card">
+            <div class="detail-header">
+                <h3>${title}</h3>
+                <span class="severity-pill ${sevClass}">${statusEmoji} ${status}</span>
+            </div>
+            <div class="detail-body">
+                ${rows.map(r => `
+                    <div class="detail-row">
+                        <span class="detail-label">${r.label}</span>
+                        <span class="detail-value ${r.highlight ? 'highlight' : ''} ${r.color || ''}">${r.value}${r.unit ? ' <small style="opacity:0.6">' + r.unit + '</small>' : ''}</span>
+                    </div>
+                `).join('')}
+            </div>
+            ${timestamp ? `<div class="detail-footer">📅 ${timestamp}</div>` : ''}
+        </div>
+    `;
+        }
+
+        // ─── Alert Center Tab ────────────────────────────────────────────────────────
+
+        function renderAlertCenter(data) {
+            const container = document.getElementById('alertCenter');
+            const alerts = data.alerts || [];
+            const m = data.metrics || {};
+
+            // Verdict
+            let verdictIcon, verdictTitle, verdictDesc, verdictClass;
+            if (alerts.length === 0) {
+                verdictIcon = '✅'; verdictTitle = 'All Systems Nominal';
+                verdictDesc = 'No space weather conditions currently warrant an alert. You do not need to take any action.';
+                verdictClass = '';
+            } else if (alerts.some(a => a.severity === 'CRITICAL')) {
+                verdictIcon = '🔴'; verdictTitle = 'CRITICAL Space Weather Alert';
+                verdictDesc = `${alerts.length} active alert(s). Immediate attention recommended — check impact on operations.`;
+                verdictClass = '';
+            } else {
+                verdictIcon = '🟠'; verdictTitle = 'Elevated Conditions';
+                verdictDesc = `${alerts.length} active alert(s). Conditions are elevated but below critical thresholds. Monitor closely.`;
+                verdictClass = '';
+            }
+
+            // Build metrics table rows
+            const metricRows = [
+                metricTableRow('Solar Wind (Bz + Speed)', m.solar_wind, data.data?.solar_wind_mag?.bz_gsm, -5, 'nT', true, data.data?.solar_wind_plasma?.speed, 500, 'km/s'),
+                metricSimpleRow('Kp Index', m.kp_index, data.data?.kp_index_1m?.kp_index, 5, ''),
+                metricSimpleRow('X-Ray Flux', m.xray_flux, data.data?.xray_flux?.flux, 1e-5, 'W/m²', true),
+                metricSimpleRow('Proton Flux (≥10 MeV)', m.proton_flux, data.data?.proton_flux?.flux, 10, 'pfu'),
+                metricSimpleRow('Electron Flux (≥2 MeV)', m.electron_flux, data.data?.electron_flux?.flux, 1000, 'pfu'),
+                metricSimpleRow('F10.7 Radio Flux', m.f107_flux, data.data?.f107_flux?.flux, 150, 'SFU'),
+                metricSimpleRow('Aurora Power', m.aurora_power, data.data?.aurora_power?.hemispheric_power_gw, 50, 'GW'),
+            ].join('');
+
+            container.innerHTML = `
+        <div class="verdict-card">
+            <span class="verdict-icon">${verdictIcon}</span>
+            <div class="verdict-text">
+                <h2>${verdictTitle}</h2>
+                <p>${verdictDesc}</p>
+            </div>
+        </div>
+
+        ${alerts.length > 0 ? `
+        <div style="margin-bottom:1.5rem;">
+            <div class="chart-title" style="margin-bottom:0.8rem">⚡ Active Alerts</div>
+            ${alerts.map(a => `
+                <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:0.6rem;border-left:3px solid ${a.severity === 'CRITICAL' ? '#ef4444' : a.severity === 'WARNING' ? '#f97316' : '#f59e0b'}">
+                    <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.35rem">
+                        <span class="severity-pill severity-${a.severity.toLowerCase()}">${a.emoji} ${a.severity}</span>
+                        <strong style="font-size:0.85rem">${a.message}</strong>
+                    </div>
+                    <p style="color:var(--text-secondary);font-size:0.8rem;margin-left:0.2rem">${a.details}</p>
+                </div>
+            `).join('')}
+        </div>
+        ` : ''}
+
+        <div class="chart-title" style="margin-bottom:0.8rem">📊 Metric Proximity to Alert Thresholds</div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+            <table class="alert-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Current Value</th>
+                        <th>Threshold</th>
+                        <th>Proximity</th>
+                        <th>Status</th>
+                        <th>Alert You?</th>
+                    </tr>
+                </thead>
+                <tbody>${metricRows}</tbody>
+            </table>
+        </div>
+
+        <div class="webhook-info">
+            <h3>📡 Webhook Endpoints (for n8n / Telegram)</h3>
+            <div class="endpoint-row">
+                <span class="endpoint-method">GET</span>
+                <span class="endpoint-url">/api/status</span>
+                <span class="endpoint-desc">— Full JSON snapshot with all data + alerts</span>
+            </div>
+            <div class="endpoint-row">
+                <span class="endpoint-method">GET</span>
+                <span class="endpoint-url">/api/alerts</span>
+                <span class="endpoint-desc">— Alerts-only (has_alerts, alert_count, messages)</span>
+            </div>
+            <div class="endpoint-row">
+                <span class="endpoint-method">POST</span>
+                <span class="endpoint-url">/api/fetch</span>
+                <span class="endpoint-desc">— Trigger manual data refresh</span>
+            </div>
+        </div>
+    `;
+        }
+
+        function metricSimpleRow(name, metric, value, threshold, unit, isExponential = false) {
+            const status = metric?.status || 'NOMINAL';
+            const emoji = metric?.status_emoji || '✅';
+            const displayVal = value == null ? 'N/A' : isExponential ? value.toExponential(2) : (typeof value === 'number' ? value.toFixed(2) : value);
+            const displayThresh = isExponential ? threshold.toExponential(0) : threshold;
+            const pct = value != null && threshold > 0 ? Math.min((Math.abs(value) / threshold) * 100, 200) : 0;
+            const barColor = pct >= 100 ? '#ef4444' : pct >= 70 ? '#f97316' : pct >= 40 ? '#f59e0b' : '#10b981';
+            const shouldAlert = status !== 'NOMINAL';
+            const sevClass = 'severity-' + status.toLowerCase();
+
+            return `<tr>
+        <td style="font-weight:500">${name}</td>
+        <td><span class="detail-value" style="font-size:0.8rem">${displayVal} ${unit}</span></td>
+        <td style="color:var(--text-muted)">${displayThresh} ${unit}</td>
+        <td>
+            <div style="display:flex;align-items:center;gap:0.5rem">
+                <div class="progress-bar-wrap"><div class="progress-bar" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div>
+                <span style="font-family:'JetBrains Mono';font-size:0.7rem;color:var(--text-muted)">${pct.toFixed(0)}%</span>
+            </div>
+        </td>
+        <td><span class="severity-pill ${sevClass}">${emoji} ${status}</span></td>
+        <td style="font-weight:600;color:${shouldAlert ? '#ef4444' : '#10b981'}">${shouldAlert ? '🔔 YES' : '🔕 No'}</td>
+    </tr>`;
+        }
+
+        function metricTableRow(name, metric, bzVal, bzThresh, bzUnit, isCombined, speedVal, speedThresh, speedUnit) {
+            const status = metric?.status || 'NOMINAL';
+            const emoji = metric?.status_emoji || '✅';
+            const displayVal = `Bz: ${fmt(bzVal)} nT / Speed: ${fmt(speedVal)} km/s`;
+            const displayThresh = `Bz ≤ ${bzThresh} nT & Speed > ${speedThresh} km/s`;
+            const bzPct = bzVal != null ? Math.min((Math.abs(bzVal) / Math.abs(bzThresh)) * 100, 200) : 0;
+            const speedPct = speedVal != null ? Math.min((speedVal / speedThresh) * 100, 200) : 0;
+            const pct = Math.max(bzPct, speedPct);
+            const barColor = pct >= 100 ? '#ef4444' : pct >= 70 ? '#f97316' : pct >= 40 ? '#f59e0b' : '#10b981';
+            const shouldAlert = status !== 'NOMINAL';
+            const sevClass = 'severity-' + status.toLowerCase();
+
+            return `<tr>
+        <td style="font-weight:500">${name}</td>
+        <td><span class="detail-value" style="font-size:0.75rem">${displayVal}</span></td>
+        <td style="color:var(--text-muted);font-size:0.75rem">${displayThresh}</td>
+        <td>
+            <div style="display:flex;align-items:center;gap:0.5rem">
+                <div class="progress-bar-wrap"><div class="progress-bar" style="width:${Math.min(pct, 100)}%;background:${barColor}"></div></div>
+                <span style="font-family:'JetBrains Mono';font-size:0.7rem;color:var(--text-muted)">${pct.toFixed(0)}%</span>
+            </div>
+        </td>
+        <td><span class="severity-pill ${sevClass}">${emoji} ${status}</span></td>
+        <td style="font-weight:600;color:${shouldAlert ? '#ef4444' : '#10b981'}">${shouldAlert ? '🔔 YES' : '🔕 No'}</td>
+    </tr>`;
+        }
+
+        // ─── Utilities ───────────────────────────────────────────────────────────────
+
+        function fmt(val, decimals = 2) {
+            if (val == null || val === undefined) return 'N/A';
+            if (typeof val === 'number') return isNaN(val) ? 'N/A' : val.toFixed(decimals);
+            return String(val);
+        }
+
+        function fmtTemp(val) {
+            if (val == null) return 'N/A';
+            if (val >= 1e6) return (val / 1e6).toFixed(2) + 'M';
+            if (val >= 1e3) return (val / 1e3).toFixed(1) + 'K';
+            return val.toFixed(0);
+        }
+
+        function colorByVal(val, warn, crit, invert = false) {
+            if (val == null) return '';
+            if (invert) {
+                if (val <= crit) return 'red';
+                if (val <= warn) return 'orange';
+                return 'green';
+            }
+            if (val >= crit) return 'red';
+            if (val >= warn) return 'orange';
+            return 'green';
+        }
+
+        function colorKp(kp) {
+            if (kp == null) return '';
+            if (kp >= 7) return 'red';
+            if (kp >= 5) return 'orange';
+            if (kp >= 4) return 'yellow';
+            return 'green';
+        }
+
+        function colorXray(flux) {
+            if (!flux) return '';
+            if (flux >= 1e-4) return 'red';
+            if (flux >= 1e-5) return 'orange';
+            return 'green';
+        }
+
+        // ─── Init ────────────────────────────────────────────────────────────────────
+
+        fetchData();
+        setInterval(fetchData, 5 * 60 * 1000); // Refresh every 5 minutes
+    </script>
+</body>
+
+</html>
