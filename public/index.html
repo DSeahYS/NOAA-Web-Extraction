@@ -693,6 +693,33 @@
                 padding: 1rem;
             }
         }
+
+        /* Interval selector buttons */
+        .interval-btn {
+            padding: 0.6rem 1.5rem;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .interval-btn:hover {
+            border-color: #606060;
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .interval-btn.active {
+            border-color: #ffffff;
+            background: #ffffff;
+            color: #000000;
+            font-weight: 600;
+        }
     </style>
 </head>
 
@@ -725,6 +752,7 @@
         <div class="tab" data-tab="detail">📋 Detailed Data</div>
         <div class="tab" data-tab="alerts">🚨 Alert Center</div>
         <div class="tab" data-tab="sources">🔗 Sources</div>
+        <div class="tab" data-tab="settings">⚙️ Settings</div>
     </nav>
 
     <div class="alert-banner" id="alertBanner">
@@ -960,6 +988,11 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-content" id="tab-settings">
+            <div id="settingsPanel"></div>
         </div>
     </main>
 
@@ -1795,8 +1828,82 @@
 
         // ─── Init ────────────────────────────────────────────────────────────────────
 
+        let refreshTimer = null;
+        const DEFAULT_INTERVAL = 5;
+
+        function getInterval() {
+            return parseInt(localStorage.getItem('noaa_refresh_min') || DEFAULT_INTERVAL, 10);
+        }
+
+        function setRefreshInterval(minutes) {
+            localStorage.setItem('noaa_refresh_min', minutes);
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(fetchData, minutes * 60 * 1000);
+            // Update UI
+            document.querySelectorAll('.interval-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.min) === minutes);
+            });
+            document.getElementById('intervalStatus').textContent = `Dashboard will auto-refresh every ${minutes} minute${minutes > 1 ? 's' : ''}.`;
+        }
+
+        function renderSettings() {
+            const container = document.getElementById('settingsPanel');
+            const current = getInterval();
+            container.innerHTML = `
+                <div style="max-width:600px">
+                    <div class="verdict-card" style="margin-bottom:1.5rem">
+                        <div class="verdict-icon">⚙️</div>
+                        <div class="verdict-text">
+                            <h2 style="color:var(--text-primary)">Dashboard Settings</h2>
+                            <p>Configure how frequently the dashboard polls for new data.</p>
+                        </div>
+                    </div>
+
+                    <div class="detail-card">
+                        <div class="detail-header">
+                            <h3>🔄 Auto-Refresh Interval</h3>
+                        </div>
+                        <div class="detail-body" style="text-align:center; padding:1.5rem">
+                            <p style="color:var(--text-secondary);margin-bottom:1rem;font-size:0.82rem">
+                                How often the dashboard fetches updated data from the server.
+                            </p>
+                            <div style="display:flex;gap:0.75rem;justify-content:center;margin-bottom:1.2rem">
+                                <button class="interval-btn ${current === 1 ? 'active' : ''}" data-min="1" onclick="setRefreshInterval(1)">1 min</button>
+                                <button class="interval-btn ${current === 5 ? 'active' : ''}" data-min="5" onclick="setRefreshInterval(5)">5 min</button>
+                                <button class="interval-btn ${current === 30 ? 'active' : ''}" data-min="30" onclick="setRefreshInterval(30)">30 min</button>
+                            </div>
+                            <p id="intervalStatus" style="color:var(--text-muted);font-size:0.75rem;font-family:'JetBrains Mono',monospace">
+                                Dashboard will auto-refresh every ${current} minute${current > 1 ? 's' : ''}.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="detail-card" style="margin-top:1rem">
+                        <div class="detail-header">
+                            <h3>ℹ️ About Polling</h3>
+                        </div>
+                        <div class="detail-body">
+                            <div class="detail-row">
+                                <span class="detail-label">Server → NOAA</span>
+                                <span class="detail-value">Every 30 min (server-side cron)</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Dashboard → Server</span>
+                                <span class="detail-value">Your selected interval above</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Note</span>
+                                <span class="detail-value" style="font-size:0.78rem">1-min refresh gives near-real-time display but does not change how often NOAA data is fetched server-side. Use the ⟳ Refresh button to force a live NOAA pull anytime.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         fetchData();
-        setInterval(fetchData, 5 * 60 * 1000); // Refresh every 5 minutes
+        setRefreshInterval(getInterval());
+        renderSettings();
     </script>
 </body>
 
