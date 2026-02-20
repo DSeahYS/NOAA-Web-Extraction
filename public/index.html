@@ -1829,7 +1829,7 @@
         // ─── Init ────────────────────────────────────────────────────────────────────
 
         let refreshTimer = null;
-        const DEFAULT_INTERVAL = 5;
+        const DEFAULT_INTERVAL = 1;
 
         function getInterval() {
             return parseInt(localStorage.getItem('noaa_refresh_min') || DEFAULT_INTERVAL, 10);
