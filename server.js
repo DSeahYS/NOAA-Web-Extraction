@@ -14,10 +14,27 @@ const alerts = require('./alerts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const API_KEY = process.env.API_KEY || null;
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ─── API Key Authentication ──────────────────────────────────────────────────
+
+// Serve the API key to the dashboard (same-origin page only)
+// The dashboard fetches this once on load and uses it for all API calls
+app.get('/auth/key', (req, res) => {
+    res.json({ key: API_KEY || '' });
+});
+
+// Protect /api/* routes when API_KEY is set
+app.use('/api', (req, res, next) => {
+    if (!API_KEY) return next(); // No key configured = open access (dev mode)
+    const provided = req.headers['x-api-key'] || req.query.key;
+    if (provided === API_KEY) return next();
+    res.status(401).json({ error: 'Unauthorized — invalid or missing API key' });
+});
 
 // ─── In-Memory Cache ─────────────────────────────────────────────────────────
 

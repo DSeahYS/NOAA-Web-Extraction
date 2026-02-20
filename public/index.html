@@ -980,17 +980,35 @@
             });
         });
 
+        // ─── API Key ─────────────────────────────────────────────────────────────────
+
+        let apiKey = '';
+        (async () => {
+            try {
+                const r = await fetch('/auth/key');
+                const j = await r.json();
+                apiKey = j.key || '';
+            } catch (e) { /* no key = open mode */ }
+        })();
+
+        function apiFetch(url, opts = {}) {
+            if (apiKey) {
+                opts.headers = { ...opts.headers, 'x-api-key': apiKey };
+            }
+            return fetch(url, opts);
+        }
+
         // ─── Fetch Data ──────────────────────────────────────────────────────────────
 
         async function fetchData() {
             try {
                 const [status, swHist, kpHist, xrayHist, protonHist, electronHist] = await Promise.all([
-                    fetch('/api/status').then(r => r.json()),
-                    fetch('/api/history/solar-wind').then(r => r.json()),
-                    fetch('/api/history/kp').then(r => r.json()),
-                    fetch('/api/history/xrays').then(r => r.json()),
-                    fetch('/api/history/protons').then(r => r.json()),
-                    fetch('/api/history/electrons').then(r => r.json()),
+                    apiFetch('/api/status').then(r => r.json()),
+                    apiFetch('/api/history/solar-wind').then(r => r.json()),
+                    apiFetch('/api/history/kp').then(r => r.json()),
+                    apiFetch('/api/history/xrays').then(r => r.json()),
+                    apiFetch('/api/history/protons').then(r => r.json()),
+                    apiFetch('/api/history/electrons').then(r => r.json()),
                 ]);
 
                 statusData = status;
@@ -1015,7 +1033,7 @@
             btn.disabled = true;
             btn.textContent = '⟳ Fetching...';
             try {
-                await fetch('/api/fetch', { method: 'POST' });
+                await apiFetch('/api/fetch', { method: 'POST' });
                 await fetchData();
             } catch (e) { console.error(e); }
             btn.disabled = false;
