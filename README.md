@@ -114,6 +114,23 @@ All data is fetched **directly from NOAA's Space Weather Prediction Center** wit
 | F10.7 cm Solar Radio Flux | Penticton Observatory | ~daily |
 | Aurora Hemispheric Power | OVATION model | ~5 min |
 
+## 🔐 Security & Authentication
+
+### 1. Global Site Lockdown (Basic Auth)
+If you want to lock the entire dashboard and all APIs away from the public (perfect for personal Vercel deployments), set these environment variables:
+
+- `SITE_USER`
+- `SITE_PASSWORD`
+
+If both are set, the server will enforce **HTTP Basic Authentication** before serving the HTML or any API routes. The browser will prompt for a username and password upon visiting.
+
+### 2. API Key Authentication (Webhook Protection)
+If you just want to protect the `/api/*` webhooks but leave the dashboard public, set this environment variable:
+
+- `API_KEY`
+
+External callers must pass it via `x-api-key` header or `?key=` query parameter. The dashboard will automatically fetch this key and attach it to its own requests.
+
 ---
 
 ## 🔌 Webhook API

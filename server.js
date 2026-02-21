@@ -8,6 +8,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const basicAuth = require('express-basic-auth');
 const extractor = require('./extractor');
 const alerts = require('./alerts');
 
@@ -17,6 +18,21 @@ const API_KEY = process.env.API_KEY || null;
 
 app.use(cors());
 app.use(express.json());
+
+// ─── Global Site Authentication ──────────────────────────────────────────────
+
+// If SITE_USER and SITE_PASSWORD are set, lock down the entire site with Basic Auth
+const SITE_USER = process.env.SITE_USER;
+const SITE_PASSWORD = process.env.SITE_PASSWORD;
+
+if (SITE_USER && SITE_PASSWORD) {
+    app.use(basicAuth({
+        users: { [SITE_USER]: SITE_PASSWORD },
+        challenge: true,
+        realm: 'NOAA Space Weather Dashboard',
+    }));
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── API Key Authentication ──────────────────────────────────────────────────
