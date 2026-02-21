@@ -90,7 +90,9 @@ async function getFreshData() {
                     const { list } = require('@vercel/blob');
                     const { blobs } = await list({ prefix: 'noaa-cache.json', limit: 1 });
                     if (blobs.length > 0) {
-                        const res = await fetch(blobs[0].url);
+                        const res = await fetch(blobs[0].url, {
+                            headers: { 'Authorization': `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+                        });
                         const blobCache = await res.json();
                         // If blob cache is fresh, use it!
                         if (now - blobCache.lastFetchBaseMs < CACHE_TTL) {
