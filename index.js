@@ -156,20 +156,28 @@ async function runCycle() {
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
 
+const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
 async function main() {
-    const isOneShot = process.argv.includes('--once');
+    const isCron = process.argv.includes('--cron');
 
     console.log('┌──────────────────────────────────────────────────────────────┐');
     console.log('│  🛰️  NOAA Space Weather Live Data Extraction System         │');
     console.log('│  Polling 9 feeds from services.swpc.noaa.gov                │');
-    console.log(`│  Mode: ${isOneShot ? 'One-shot fetch' : '30-minute scheduled polling'}                        │`);
+    console.log(`│  Mode: ${isCron ? '30-minute scheduled polling' : 'One-shot fetch'}                        │`);
     console.log('└──────────────────────────────────────────────────────────────┘');
 
     // Run immediately
     await runCycle();
 
-    // Run immediately
-    await runCycle();
+    // Schedule recurring polling if --cron flag is set
+    if (isCron) {
+        console.log(`\n⏰ Next fetch in 30 minutes. Press Ctrl+C to stop.\n`);
+        setInterval(async () => {
+            await runCycle();
+            console.log(`\n⏰ Next fetch in 30 minutes. Press Ctrl+C to stop.\n`);
+        }, POLL_INTERVAL_MS);
+    }
 }
 
 main().catch(console.error);

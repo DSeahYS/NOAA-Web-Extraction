@@ -207,27 +207,27 @@ app.get('/api/alerts', async (req, res) => {
 // Chart history endpoints
 app.get('/api/history/solar-wind', async (req, res) => {
     try { const c = await getFreshData(); res.json({ mag: c.history.solarWindMag, plasma: c.history.solarWindPlasma }); }
-    catch { res.status(503).json({ error: 'Failed' }); }
+    catch (e) { res.status(503).json({ error: 'Failed' }); }
 });
 
 app.get('/api/history/kp', async (req, res) => {
     try { const c = await getFreshData(); res.json({ kp: c.history.kpIndex }); }
-    catch { res.status(503).json({ error: 'Failed' }); }
+    catch (e) { res.status(503).json({ error: 'Failed' }); }
 });
 
 app.get('/api/history/xrays', async (req, res) => {
     try { const c = await getFreshData(); res.json({ xrays: c.history.xrays }); }
-    catch { res.status(503).json({ error: 'Failed' }); }
+    catch (e) { res.status(503).json({ error: 'Failed' }); }
 });
 
 app.get('/api/history/protons', async (req, res) => {
     try { const c = await getFreshData(); res.json({ protons: c.history.protons }); }
-    catch { res.status(503).json({ error: 'Failed' }); }
+    catch (e) { res.status(503).json({ error: 'Failed' }); }
 });
 
 app.get('/api/history/electrons', async (req, res) => {
     try { const c = await getFreshData(); res.json({ electrons: c.history.electrons }); }
-    catch { res.status(503).json({ error: 'Failed' }); }
+    catch (e) { res.status(503).json({ error: 'Failed' }); }
 });
 
 // Manual re-fetch trigger (bypass cache)

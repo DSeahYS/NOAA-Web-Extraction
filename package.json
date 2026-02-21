@@ -5,8 +5,8 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
-        "fetch": "node index.js --once",
-        "cli": "node index.js"
+        "fetch": "node index.js",
+        "cli": "node index.js --cron"
     },
     "keywords": [
         "noaa",

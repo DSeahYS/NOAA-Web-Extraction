@@ -148,13 +148,11 @@ REST endpoints for external automation:
 |----------|--------|-------------|
 | `/api/status` | `GET` | Full JSON snapshot — all feeds, metrics, alerts |
 | `/api/alerts` | `GET` | Alerts only — `has_alerts`, `alert_count`, messages |
-| `/api/data` | `GET` | Raw extracted data without metrics or alerts |
-| `/api/metrics` | `GET` | Computed metrics with status classifications |
-| `/api/history/sw` | `GET` | 24h solar wind history (mag + plasma) |
+| `/api/history/solar-wind` | `GET` | 24h solar wind history (mag + plasma) |
 | `/api/history/kp` | `GET` | 24h Kp index history |
-| `/api/history/xray` | `GET` | 24h X-ray flux history |
-| `/api/history/proton` | `GET` | 24h proton flux history |
-| `/api/history/electron` | `GET` | 24h electron flux history |
+| `/api/history/xrays` | `GET` | 24h X-ray flux history |
+| `/api/history/protons` | `GET` | 24h proton flux history |
+| `/api/history/electrons` | `GET` | 24h electron flux history |
 | `/api/fetch` | `POST` | Trigger a manual re-fetch from NOAA |
 
 **Example:**
