@@ -9,7 +9,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const cron = require('node-cron');
 const extractor = require('./extractor');
 const alerts = require('./alerts');
 
@@ -169,12 +168,8 @@ async function main() {
     // Run immediately
     await runCycle();
 
-    if (!isOneShot) {
-        // Schedule every 30 minutes
-        console.log('\n⏱️  Scheduler active — next fetch in 30 minutes.');
-        console.log('   Press Ctrl+C to stop.\n');
-        cron.schedule('*/30 * * * *', runCycle);
-    }
+    // Run immediately
+    await runCycle();
 }
 
 main().catch(console.error);

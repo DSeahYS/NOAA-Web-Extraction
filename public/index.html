@@ -1502,9 +1502,10 @@
             const ddcRisk = riskLevel(eFl2, 100, 1000, 10000);
             const ddcDetail = `≥2 MeV e⁻ flux: ${eFl2 != null ? fmt(eFl2, 1) + ' pfu' : 'N/A'}. Internal charging from high-energy electrons penetrating shielding.`;
 
-            // Surface charging: driven by ≥0.8 MeV electrons + low density
+            // Surface charging: driven by ~0.8 MeV electrons (865 keV diff band) + low density
+            // Using 1,000 threshold for elevated differential flux in this channel
             const scRisk = (eFl08 > 5000 || (kp >= 5 && density < 3)) ? riskLevel(100, 10, 50) : riskLevel(eFl08, 1000, 5000, 50000);
-            const scDetail = `≥0.8 MeV e⁻: ${eFl08 != null ? fmt(eFl08, 0) + ' pfu' : 'N/A'}, Density: ${density != null ? fmt(density, 1) + ' p/cm³' : 'N/A'}. Differential charging on satellite surfaces.`;
+            const scDetail = `865 keV e⁻: ${eFl08 != null ? fmt(eFl08, 0) + ' pfu/sr/MeV' : 'N/A'}, Density: ${density != null ? fmt(density, 1) + ' p/cm³' : 'N/A'}. Differential charging on satellite surfaces.`;
 
             // SEU risk: driven by ≥100 MeV protons (most penetrating)
             const seuRisk = riskLevel(pFl100, 0.5, 1, 10);
@@ -1593,7 +1594,7 @@
 
         ${detailCard('⚡ Electron Flux — Radiation Belt (GOES)', m.electron_flux, [
                 { label: '≥2 MeV (relativistic)', value: fmt(eFl2, 1), unit: 'pfu', highlight: true, color: colorByVal(eFl2, 1000, 10000) },
-                { label: '≥0.8 MeV', value: fmt(eFl08, 0), unit: 'pfu', color: colorByVal(eFl08, 5000, 50000) },
+                { label: '865 keV (differential)', value: fmt(eFl08, 0), unit: 'pfu/sr/MeV', color: colorByVal(eFl08, 5000, 50000) },
                 { label: 'Charging Risk', value: eFl2 >= 1000 ? '🔴 Deep dielectric charging threshold exceeded' : eFl2 >= 100 ? '🟡 Elevated — monitor trend' : '🟢 Below threshold' },
                 { label: 'Operational Advice', value: eFl2 >= 1000 ? '⚠️ Consider safe-mode for vulnerable subsystems' : '✅ Normal operations' },
             ], d.electron_flux?.time_tag)}

@@ -25,10 +25,12 @@ const FEEDS = {
     xrays: 'https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json',
 
     // GOES Proton Flux — Array-of-objects
-    protons: 'https://services.swpc.noaa.gov/json/goes/primary/integral-protons-1-day.json',
+    protons: 'https://services.swpc.noaa.gov/json/goes/primary/integral-protons-3-day.json',
 
     // GOES Electron Flux — Array-of-objects
-    electrons: 'https://services.swpc.noaa.gov/json/goes/primary/integral-electrons-1-day.json',
+    electrons: 'https://services.swpc.noaa.gov/json/goes/primary/integral-electrons-3-day.json',
+    // The differential feed contains the 865 keV band (modern replacement for 0.8 MeV)
+    electronsDiff: 'https://services.swpc.noaa.gov/json/goes/primary/differential-electrons-3-day.json',
 
     // F10.7 cm Solar Radio Flux — Array-of-objects
     f107: 'https://services.swpc.noaa.gov/json/f107_cm_flux.json',
@@ -168,8 +170,9 @@ async function fetchAll() {
         fetchJSON(FEEDS.xrays),              // 4
         fetchJSON(FEEDS.protons),            // 5
         fetchJSON(FEEDS.electrons),          // 6
-        fetchJSON(FEEDS.f107),               // 7
-        fetchText(FEEDS.aurora),             // 8
+        fetchJSON(FEEDS.electronsDiff),      // 7
+        fetchJSON(FEEDS.f107),               // 8
+        fetchText(FEEDS.aurora),             // 9
     ]);
 
     function getResult(idx, name) {
@@ -185,8 +188,9 @@ async function fetchAll() {
     const xrayData = getResult(4, 'X-Ray Flux');
     const protonData = getResult(5, 'Proton Flux');
     const electronData = getResult(6, 'Electron Flux');
-    const f107Data = getResult(7, 'F10.7 Flux');
-    const auroraText = getResult(8, 'Aurora Power');
+    const electronDiffData = getResult(7, 'Electron Flux (Differential)');
+    const f107Data = getResult(8, 'F10.7 Flux');
+    const auroraText = getResult(9, 'Aurora Power') || '';
 
     // ── Extract Solar Wind Magnetic Field ──
     // Format: array-of-arrays, header = ["time_tag","bx_gsm","by_gsm","bz_gsm","lon_gsm","lat_gsm","bt"]
@@ -259,7 +263,9 @@ async function fetchAll() {
         energy: electronItem.energy,
         flux: electronItem.flux,
     } : null;
-    const electron08 = getLastValidByEnergy(electronData, '>=0.8 MeV');
+
+    // The ~0.8 MeV band (865 keV) is found in the differential feed
+    const electron08 = getLastValidByEnergy(electronDiffData, '865 keV');
     const electronFlux08 = electron08 ? { time_tag: electron08.time_tag, energy: electron08.energy, flux: electron08.flux } : null;
 
     // ── Extract F10.7 Flux ──
@@ -281,7 +287,7 @@ async function fetchAll() {
         data: {
             solar_wind_mag: solarWindMag,
             solar_wind_plasma: solarWindPlasma,
-            kp_index_1m: kpIndex1m,
+            kp_index_1m: kp1mItem,
             kp_index_official: kpIndexOfficial,
             xray_flux: xrayFlux,
             xray_flux_short: xrayFluxShort,
@@ -311,6 +317,7 @@ async function fetchRawHistory() {
         fetchJSON(FEEDS.xrays),
         fetchJSON(FEEDS.protons),
         fetchJSON(FEEDS.electrons),
+        // fetchJSON(FEEDS.electronsDiff), // History not currently plotted for 0.8 MeV
     ]);
 
     function getResult(idx, name) {
