@@ -126,7 +126,7 @@ async function getFreshData() {
             if (process.env.BLOB_READ_WRITE_TOKEN) {
                 const { put } = require('@vercel/blob');
                 put('noaa-cache.json', JSON.stringify(memoryCache), {
-                    access: 'public',
+                    access: 'private',
                     addRandomSuffix: false // Overwrites the exact same file URL
                 }).then(() => console.log('☁️ Saved fresh history to Vercel Blob'))
                     .catch(e => console.error('Blob save failed:', e.message));
