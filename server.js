@@ -51,9 +51,9 @@ app.use('/api', (req, res, next) => {
     res.status(401).json({ error: 'Unauthorized — invalid or missing API key' });
 });
 
-// ─── Smart Cache Engine (Vercel Compatible) ──────────────────────────────────
+// ─── Smart Cache Engine (Vercel & Blob Compatible) ───────────────────────────
 
-let cache = {
+let memoryCache = {
     data: null,
     evaluation: null,
     history: null,
@@ -69,9 +69,9 @@ const CACHE_TTL = 5 * 60 * 1000;
 async function getFreshData() {
     const now = Date.now();
 
-    // 1. Return cache if it's fresh
-    if (cache.data && (now - cache.lastFetchBaseMs < CACHE_TTL)) {
-        return cache;
+    // 1. Return INSTANT memory cache if it's fresh (saves hitting Blob or NOAA)
+    if (memoryCache.data && (now - memoryCache.lastFetchBaseMs < CACHE_TTL)) {
+        return memoryCache;
     }
 
     // 2. If already fetching, wait and return that result (thundering herd protection)
@@ -79,35 +79,69 @@ async function getFreshData() {
         return await fetchPromise;
     }
 
-    // 3. Otherwise, fetch new data from NOAA
     isFetching = true;
-    console.log(`[${new Date().toISOString()}] Cache stale or missing. Fetching from NOAA...`);
 
     fetchPromise = (async () => {
         try {
+            // 3. Try to fetch from Vercel Blob if we have the token and we just booted up (memory is empty)
+            if (!memoryCache.data && process.env.BLOB_READ_WRITE_TOKEN) {
+                try {
+                    console.log('☁️ Checking Vercel Blob for persistent cache...');
+                    const { list } = require('@vercel/blob');
+                    const { blobs } = await list({ prefix: 'noaa-cache.json', limit: 1 });
+                    if (blobs.length > 0) {
+                        const res = await fetch(blobs[0].url);
+                        const blobCache = await res.json();
+                        // If blob cache is fresh, use it!
+                        if (now - blobCache.lastFetchBaseMs < CACHE_TTL) {
+                            console.log('✅ Recovered fresh cache from Vercel Blob!');
+                            memoryCache = blobCache;
+                            return memoryCache;
+                        } else {
+                            console.log('☁️ Blob cache is stale, fetching from NOAA...');
+                        }
+                    }
+                } catch (err) {
+                    console.error('Blob read error (falling back to NOAA fetch):', err.message);
+                }
+            }
+
+            // 4. Otherwise, fetch new data from NOAA
+            console.log(`[${new Date().toISOString()}] Cache stale or missing. Fetching from NOAA...`);
             const startTime = Date.now();
             const [result, history] = await Promise.all([
                 extractor.fetchAll(),
                 extractor.fetchRawHistory(),
             ]);
 
-            cache = {
+            memoryCache = {
                 data: result,
                 evaluation: alerts.evaluate(result.data),
                 history: history,
+                // Add 4-min offset if using Blob to prevent edge caching and blob caching from expiring at exactly the exact same time
                 lastFetchBaseMs: Date.now()
             };
+
+            // 5. Save to Vercel Blob in the background if configured
+            if (process.env.BLOB_READ_WRITE_TOKEN) {
+                const { put } = require('@vercel/blob');
+                put('noaa-cache.json', JSON.stringify(memoryCache), {
+                    access: 'public',
+                    addRandomSuffix: false // Overwrites the exact same file URL
+                }).then(() => console.log('☁️ Saved fresh history to Vercel Blob'))
+                    .catch(e => console.error('Blob save failed:', e.message));
+            }
 
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
             console.log(`[${new Date().toISOString()}] ✅ Data fetched in ${elapsed}s`);
 
-            return cache;
+            return memoryCache;
         } catch (err) {
             console.error(`[ERROR] NOAA Fetch failed: ${err.message}`);
             // If fetch fails but we have stale cache, return it rather than crashing
-            if (cache.data) {
-                console.log('Returning stale cache due to fetch error.');
-                return cache;
+            if (memoryCache.data) {
+                console.log('Returning stale memory cache due to fetch error.');
+                return memoryCache;
             }
             throw err;
         } finally {
@@ -198,7 +232,15 @@ app.get('/api/history/electrons', async (req, res) => {
 
 // Manual re-fetch trigger (bypass cache)
 app.post('/api/fetch', async (req, res) => {
-    cache.lastFetchBaseMs = 0; // Invalidate cache
+    memoryCache.lastFetchBaseMs = 0; // Invalidate memory cache
+    // Also delete blob if we want to force full NOAA refresh
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+        try {
+            const { del } = require('@vercel/blob');
+            await del('noaa-cache.json');
+        } catch (e) { }
+    }
+
     try {
         const c = await getFreshData();
         res.json({ success: true, last_fetch: new Date(c.lastFetchBaseMs).toISOString() });

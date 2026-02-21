@@ -131,6 +131,13 @@ If you just want to protect the `/api/*` webhooks but leave the dashboard public
 
 External callers must pass it via `x-api-key` header or `?key=` query parameter. The dashboard will automatically fetch this key and attach it to its own requests.
 
+### 3. Vercel Blob Storage (Serverless History Persistence)
+Because Serverless functions shut down quickly, 24-hour chart history is normally lost on cold starts. Vercel Edge Caching prevents NOAA rate limits, but to truly persist data across cold starts:
+
+1. Create a **Vercel Blob** store in your Vercel project storage settings.
+2. Vercel will automatically add the `BLOB_READ_WRITE_TOKEN` environment variable.
+3. The server automatically detects this token and upgrades to a fully persistent history architecture (`noaa-cache.json`).
+
 ---
 
 ## 🔌 Webhook API
@@ -176,11 +183,11 @@ curl http://localhost:3000/api/alerts | jq
 
 ```
 NOAA-Web-Extraction/
-├── server.js          # Express server — API routes, static serving, cron
+├── server.js          # Express server — Edge Caching, Vercel Blob, basic-auth
 ├── extractor.js       # NOAA feed fetcher — 9 feeds, multi-band extraction
 ├── alerts.js          # Alert engine — thresholds, NOAA G/S/R scale mapping
 ├── index.js           # CLI entry point — single run or cron mode
-├── package.json       # Dependencies: node-fetch, node-cron, express, cors
+├── package.json       # Dependencies: express, cors, express-basic-auth, @vercel/blob
 └── public/
     └── index.html     # Dashboard — Chart.js, 4 tabs, clocks, risk advisories
 ```
