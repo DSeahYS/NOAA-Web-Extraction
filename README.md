@@ -87,7 +87,7 @@ npm install
 node server.js
 ```
 
-Open **http://localhost:3000** in your browser.
+Open **<http://localhost:3000>** in your browser.
 
 ### CLI Mode (headless)
 
@@ -117,6 +117,7 @@ All data is fetched **directly from NOAA's Space Weather Prediction Center** wit
 ## 🔐 Security & Authentication
 
 ### 1. Global Site Lockdown (Basic Auth)
+
 If you want to lock the entire dashboard and all APIs away from the public (perfect for personal Vercel deployments), set these environment variables:
 
 - `SITE_USER`
@@ -125,18 +126,12 @@ If you want to lock the entire dashboard and all APIs away from the public (perf
 If both are set, the server will enforce **HTTP Basic Authentication** before serving the HTML or any API routes. The browser will prompt for a username and password upon visiting.
 
 ### 2. API Key Authentication (Webhook Protection)
+
 If you just want to protect the `/api/*` webhooks but leave the dashboard public, set this environment variable:
 
 - `API_KEY`
 
 External callers must pass it via `x-api-key` header or `?key=` query parameter. The dashboard will automatically fetch this key and attach it to its own requests.
-
-### 3. Vercel Blob Storage (Serverless History Persistence)
-Because Serverless functions shut down quickly, 24-hour chart history is normally lost on cold starts. Vercel Edge Caching prevents NOAA rate limits, but to truly persist data across cold starts:
-
-1. Create a **Vercel Blob** store in your Vercel project storage settings.
-2. Vercel will automatically add the `BLOB_READ_WRITE_TOKEN` environment variable.
-3. The server automatically detects this token and upgrades to a fully persistent history architecture (`noaa-cache.json`).
 
 ---
 
@@ -181,11 +176,11 @@ curl http://localhost:3000/api/alerts | jq
 
 ```
 NOAA-Web-Extraction/
-├── server.js          # Express server — Edge Caching, Vercel Blob, basic-auth
+├── server.js          # Express server — Edge Caching, basic-auth
 ├── extractor.js       # NOAA feed fetcher — 9 feeds, multi-band extraction
 ├── alerts.js          # Alert engine — thresholds, NOAA G/S/R scale mapping
 ├── index.js           # CLI entry point — single run or cron mode
-├── package.json       # Dependencies: express, cors, express-basic-auth, @vercel/blob
+├── package.json       # Dependencies: express, cors, express-basic-auth
 └── public/
     └── index.html     # Dashboard — Chart.js, 4 tabs, clocks, risk advisories
 ```
